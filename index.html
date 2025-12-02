@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Lista Diária — Técnicos (Pronto)</title>
+  <title>Lista Diária — Técnicos (Final)</title>
   <style>
     :root{--bg:#f6f7fb;--card:#fff;--muted:#667085;--accent:#0ea5a4;--danger:#ef4444;--ok:#10b981}
     html,body{height:100%;margin:0;font-family:Inter,system-ui,Arial,sans-serif;background:var(--bg);color:#0f172a}
@@ -21,7 +21,7 @@
     .tech{border-radius:10px;padding:10px;border:1px solid #f0f2f6;margin-bottom:8px}
     .tech .name{font-weight:600;color:#0f172a}
     .buttons{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-top:8px}
-    .btn-status{padding:8px;border-radius:8px;border:1px solid #e6e9ef;background:#fff;font-weight:600}
+    .btn-status{padding:8px;border-radius:8px;border:1px solid #e6e9ef;background:#fff;font-weight:600;cursor:pointer}
     .btn-trabalha.active{background:var(--ok);border-color:var(--ok);color:#fff}
     .btn-nao.active{background:var(--danger);border-color:var(--danger);color:#fff}
     .btn-entra.active{background:#f59e0b;border-color:#f59e0b;color:#fff}
@@ -33,12 +33,12 @@
     .chart .active{height:100%;background:linear-gradient(90deg,#10b981,#059669);border-radius:8px 0 0 8px}
     .chart .inactive{height:100%;background:linear-gradient(90deg,#f97316,#fb923c);position:absolute;right:0;top:0;border-radius:0 8px 8px 0}
     .small-muted{font-size:12px;color:var(--muted)}
-    .filterBar button{background:#fff;color:#0f172a;border:1px solid #e6e9ef;padding:8px 10px;border-radius:8px;font-weight:600}
+    .filterBar button{background:#fff;color:#0f172a;border:1px solid #e6e9ef;padding:8px 10px;border-radius:8px;font-weight:600;cursor:pointer}
     .modal-backdrop{position:fixed;inset:0;background:rgba(7,12,34,0.45);display:none;align-items:center;justify-content:center;padding:12px;z-index:40}
     .modal{background:#fff;border-radius:12px;width:100%;max-width:520px;padding:16px;box-shadow:0 12px 40px rgba(2,6,23,0.25)}
     .modal h3{margin:0 0 8px 0}
     .list-select{max-height:220px;overflow:auto;border:1px solid #eef2f5;padding:8px;border-radius:8px;margin-bottom:8px}
-    .list-item{padding:8px;border-radius:8px;border:1px solid transparent;margin-bottom:6px}
+    .list-item{padding:8px;border-radius:8px;border:1px solid transparent;margin-bottom:6px;cursor:pointer}
     .list-item:hover{background:#f8fafc;border-color:#e6eef2f}
     .row-between{display:flex;justify-content:space-between;align-items:center}
     @media(min-width:800px){.buttons{grid-template-columns:repeat(4,140px)} }
@@ -49,7 +49,7 @@
     <header>
       <div>
         <h1>Lista Diária — Técnicos</h1>
-        <p class="small">Versão pronta: mobile-first, modais, export CSV.</p>
+        <p class="small">Versão final — sincronização em tempo real.</p>
       </div>
     </header>
 
@@ -60,6 +60,7 @@
       <button id="openAdd" class="ghost">Adicionar</button>
       <button id="openRemove" class="ghost">Excluir</button>
       <button id="openMove" class="ghost">Mover</button>
+      <button id="forceSync" class="ghost" title="Forçar sincronização">Forçar Sync</button>
     </div>
 
     <div id="filterBar" class="controls filterBar" style="margin-bottom:8px"></div>
@@ -150,6 +151,7 @@
     const openRemove = document.getElementById('openRemove');
     const openMove = document.getElementById('openMove');
     const filterBar = document.getElementById('filterBar');
+    const forceSync = document.getElementById('forceSync');
 
     const totalEl = document.getElementById('total');
     const activeEl = document.getElementById('active');
@@ -240,8 +242,9 @@
           right.appendChild(moveBtn); row.appendChild(right); box.appendChild(row);
 
           // status buttons
-         const bTr = makeBtn('Trabalha','trabalha', t.status === 'trabalha');
-         bTr.onclick = () => setStatus(s, idx, 'trabalha');
+          const btns = document.createElement('div'); btns.className='buttons';
+          const bTr = makeBtn('Trabalha','trabalha', t.status === 'trabalha');
+          bTr.onclick = () => setStatus(s, idx, 'trabalha');
 
           const bNa = makeBtn('Não Trabalha','nao', t.status === 'nao');
           bNa.onclick = () => setStatus(s, idx, 'nao');
@@ -252,24 +255,18 @@
           const bSa = makeBtn('Sai mais cedo','sai_mais_cedo', t.status === 'sai_mais_cedo');
           bSa.onclick = () => setStatus(s, idx, 'sai_mais_cedo');
 
-
-          bTr.onclick = ()=> setStatus(s, idx, 'trabalha');
-          bNa.onclick = ()=> setStatus(s, idx, 'nao');
-          bEn.onclick = ()=> setStatus(s, idx, 'entra_mais_tarde');
-          bSa.onclick = ()=> setStatus(s, idx, 'sai_mais_cedo');
-
           btns.appendChild(bTr); btns.appendChild(bNa); btns.appendChild(bEn); btns.appendChild(bSa);
           box.appendChild(btns);
 
           if(t.status === 'entra_mais_tarde' || t.status === 'sai_mais_cedo'){
             const flex = document.createElement('div'); flex.className='flex'; flex.style.marginTop='8px';
             const time = document.createElement('input'); time.type='time'; time.value = t.time || '';
-            time.onchange = (e)=> { t.time = e.target.value; saveInMemory(); };
+            time.onchange = (e)=> { t.time = e.target.value; window.AttendanceSync && window.AttendanceSync.scheduleSave(); };
             flex.appendChild(time); box.appendChild(flex);
           }
 
           const note = document.createElement('textarea'); note.placeholder='Observação / motivo'; note.value = t.note || '';
-          note.onchange = (e)=> { t.note = e.target.value; saveInMemory(); };
+          note.onchange = (e)=> { t.note = e.target.value; window.AttendanceSync && window.AttendanceSync.scheduleSave(); };
           note.style.marginTop='8px'; box.appendChild(note);
 
           card.appendChild(box);
@@ -290,13 +287,15 @@
     }
 
     function setStatus(s, idx, status){
+      // ensure supervisor and index exist
+      if(!DATA[s] || !DATA[s][idx]) return;
       DATA[s][idx].status = status;
       if(status !== 'entra_mais_tarde' && status !== 'sai_mais_cedo') DATA[s][idx].time = '';
-      saveInMemory(); render();
+      // re-render UI
+      render();
+      // schedule remote save (safe, debounced)
+      window.AttendanceSync && window.AttendanceSync.scheduleSave();
     }
-
-    // simple in-memory "save" (keeps current DATA)
-    function saveInMemory(){ /* no-op here: DATA is already mutated */ }
 
     // -------- CSV export (safe) --------
     function exportCSV(){
@@ -312,7 +311,8 @@
     }
 
     csvBtn.addEventListener('click', exportCSV);
-    resetBtn.addEventListener('click', ()=>{ DATA = makeDefault(); render(); });
+    resetBtn.addEventListener('click', ()=>{ DATA = makeDefault(); render(); window.AttendanceSync && window.AttendanceSync.scheduleSave(); });
+    forceSync.addEventListener('click', ()=>{ window.AttendanceSync && window.AttendanceSync.saveToFirebase(); alert('Sincronização forçada.'); });
 
     // ------- Modal helpers (reusable) -------
     function openModal(title, bodyNode, confirmLabel='Confirmar', onConfirm){
@@ -338,6 +338,7 @@
         const sup = supSel.value; const name = nameInp.value && nameInp.value.trim();
         if(!name) return alert('Informe um nome válido.');
         DATA[sup].push({ name, status:'pendente', time:'', note:'' }); render();
+        window.AttendanceSync && window.AttendanceSync.scheduleSave();
       });
     };
 
@@ -364,12 +365,12 @@
         const idx = parseInt(listDiv.dataset.chosenIdx,10);
         if(Number.isNaN(idx)) return alert('Escolha um técnico da lista.');
         DATA[supSel.value].splice(idx,1); render();
+        window.AttendanceSync && window.AttendanceSync.scheduleSave();
       });
     };
 
     // ------- Move modal -------
     function openMoveModal(fromSup, idx){
-      // open simpler modal for moving a specific technician
       const body = document.createElement('div');
       const info = document.createElement('div'); info.className='small-muted'; info.style.marginBottom='8px';
       info.textContent = 'Mover: ' + (DATA[fromSup][idx]?.name || '(sem nome)') + ' — de ' + fromSup;
@@ -379,12 +380,12 @@
       openModal('Mover Técnico', body, 'Mover', ()=>{
         const to = toSel.value; if(!to) return;
         const item = DATA[fromSup].splice(idx,1)[0]; DATA[to].push(item); render();
+        window.AttendanceSync && window.AttendanceSync.scheduleSave();
       });
     }
 
     // ------- Open general Move (choose item) -------
     openMove.onclick = ()=> {
-      // open modal with supervisor list and their techs
       const body = document.createElement('div');
       const desc = document.createElement('div'); desc.className='small-muted'; desc.textContent='Toque no técnico para selecionar (origem).';
       const listDiv = document.createElement('div'); listDiv.className='list-select'; listDiv.style.maxHeight='300px';
@@ -405,7 +406,7 @@
 
     // ------- misc helpers -------
     function onLoad() { render(); }
-    dateInput.addEventListener('change', render);
+    dateInput.addEventListener('change', onLoad);
 
     // init
     onLoad();
@@ -413,132 +414,92 @@
   })();
   </script>
 
-  <!-- Firebase + Sincronização Realtime (substituição segura) -->
-<script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-database-compat.js"></script>
+  <!-- Firebase Sync seguro (final) -->
+  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-database-compat.js"></script>
 
-<script>
-(function(){
-  // === seu config (mantive o que você já usou) ===
-  const FIREBASE_CONFIG = {
-    apiKey: "AIzaSyDq1-T7ADK2B1tOnJQfBegCBWZ2OJcyp5w",
-    authDomain: "lista-presenca-tecnicos.firebaseapp.com",
-    databaseURL: "https://lista-presenca-tecnicos-default-rtdb.firebaseio.com",
-    projectId: "lista-presenca-tecnicos",
-    storageBucket: "lista-presenca-tecnicos.firebasestorage.app",
-    messagingSenderId: "859660776766",
-    appId: "1:859660776766:web:c57292bf8332d99bd5286f"
-  };
-
-  const app = firebase.initializeApp(FIREBASE_CONFIG);
-  const db  = firebase.database();
-
-  function getDateKey(){
-    const el = document.getElementById("date");
-    return el && el.value ? el.value : new Date().toISOString().slice(0,10);
-  }
-
-  let saveTimer = null;
-  let lastLocal = "";
-  function serialize(obj){ try{ return JSON.stringify(obj); } catch(e){ return ""; } }
-
-  // --- sanitize and save (removes undefined automatically) ---
-  async function saveToFirebase(){
-    try{
-      const key = getDateKey();
-      const data = window.DATA || {};
-      // remove undefined and non-serializables
-      const safeData = JSON.parse(JSON.stringify(data));
-      const serialized = serialize(safeData);
-      if(serialized === lastLocal) return; // nothing changed
-      lastLocal = serialized;
-
-      await db.ref("attendance/" + key).set({
-        data: safeData,
-        updatedAt: Date.now()
-      });
-      console.log("[SYNC] Salvo no Firebase:", key);
-    }catch(err){
-      console.error("[SYNC] Erro ao salvar:", err);
-    }
-  }
-
-  function scheduleSave(){
-    if(saveTimer) clearTimeout(saveTimer);
-    saveTimer = setTimeout(()=> { saveTimer = null; saveToFirebase(); }, 700);
-  }
-
-  // --- listen for remote updates and apply safely ---
-  function listen(){
-    const key = getDateKey();
-    console.log("[SYNC] Escutando:", key);
-    const ref = db.ref("attendance/" + key);
-    // detach previous listeners for safety
-    try{ ref.off(); } catch(e){}
-    ref.on("value", snap => {
-      if(!snap.exists()) {
-        console.log("[SYNC] Nenhum dado remoto para:", key);
-        return;
-      }
-      const val = snap.val();
-      if(!val || typeof val.data === 'undefined') return;
-      const safe = val.data;
-      const serialized = serialize(safe);
-      if(serialized === lastLocal) {
-        // remote equals local -> avoid loop
-        lastLocal = serialized;
-        return;
-      }
-      lastLocal = serialized;
-      window.DATA = safe;
-      console.log("[SYNC] Aplicado update remoto:", key);
-      if(typeof window.render === "function") {
-        try{ window.render(); } catch(e){ console.error('render error', e); }
-      }
-    });
-  }
-
-  // --- monitor DOM/state changes to schedule saves ---
-  const cont = document.querySelector(".container");
-  if(cont){
-    const mo = new MutationObserver(()=> scheduleSave());
-    mo.observe(cont,{childList:true,subtree:true,attributes:true,characterData:true});
-  } else {
-    console.warn('[SYNC] .container não encontrada — MutationObserver não ligado.');
-  }
-
-  // --- intercept setStatus if exists to trigger save immediately ---
-  if(typeof window.setStatus === "function"){
-    const _orig = window.setStatus;
-    window.setStatus = function(...args){
-      const res = _orig.apply(this, args);
-      scheduleSave();
-      return res;
+  <script>
+  (function(){
+    const FIREBASE_CONFIG = {
+      apiKey: "AIzaSyDq1-T7ADK2B1tOnJQfBegCBWZ2OJcyp5w",
+      authDomain: "lista-presenca-tecnicos.firebaseapp.com",
+      databaseURL: "https://lista-presenca-tecnicos-default-rtdb.firebaseio.com",
+      projectId: "lista-presenca-tecnicos",
+      storageBucket: "lista-presenca-tecnicos.firebasestorage.app",
+      messagingSenderId: "859660776766",
+      appId: "1:859660776766:web:c57292bf8332d99bd5286f"
     };
-  }
 
-  // --- expose API for manual control and ensure startup ---
-  window.AttendanceSync = {
-    listen,
-    saveToFirebase,
-    scheduleSave,
-    lastLocal: ()=> lastLocal
-  };
+    const app = firebase.initializeApp(FIREBASE_CONFIG);
+    const db  = firebase.database();
 
-  // on load, start listening + try a save (debounced)
-  window.addEventListener("load", ()=>{
-    setTimeout(()=>{
-      try{ window.AttendanceSync.listen(); window.AttendanceSync.saveToFirebase(); }
-      catch(e){ console.error('[SYNC] error during startup', e); }
-    }, 600);
-  });
+    function getDateKey(){
+      const el = document.getElementById("date");
+      return el && el.value ? el.value : new Date().toISOString().slice(0,10);
+    }
 
-  // re-listen when date changes
-  const dateEl = document.getElementById("date");
-  if(dateEl) dateEl.addEventListener("change", ()=> { setTimeout(()=> { window.AttendanceSync.listen(); }, 300); });
+    let saveTimer = null;
+    let lastLocal = "";
+    function serialize(obj){ try{ return JSON.stringify(obj); } catch(e){ return ""; } }
 
-})();
-</script>
-<!-- FIM: Firebase Sync seguro -->
+    async function saveToFirebase(){
+      try{
+        const key = getDateKey();
+        const data = window.DATA || {};
+        const safeData = JSON.parse(JSON.stringify(data));
+        const serialized = serialize(safeData);
+        if(serialized === lastLocal) return;
+        lastLocal = serialized;
+        await db.ref("attendance/" + key).set({ data: safeData, updatedAt: Date.now() });
+        console.log("[SYNC] Salvo no Firebase:", key);
+      }catch(err){
+        console.error("[SYNC] Erro ao salvar:", err);
+      }
+    }
 
+    function scheduleSave(){ if(saveTimer) clearTimeout(saveTimer); saveTimer = setTimeout(()=>{ saveTimer=null; saveToFirebase(); }, 700); }
+
+    function listen(){
+      const key = getDateKey();
+      console.log("[SYNC] Escutando:", key);
+      const ref = db.ref("attendance/" + key);
+      try{ ref.off(); } catch(e){}
+      ref.on("value", snap => {
+        if(!snap.exists()){ console.log("[SYNC] Nenhum dado remoto para:", key); return; }
+        const val = snap.val();
+        if(!val || typeof val.data === 'undefined') return;
+        const safe = val.data;
+        const serialized = serialize(safe);
+        if(serialized === lastLocal){ lastLocal = serialized; return; }
+        lastLocal = serialized;
+        window.DATA = safe;
+        console.log("[SYNC] Aplicado update remoto:", key);
+        if(typeof window.render === "function"){
+          try{ window.render(); } catch(e){ console.error('render error', e); }
+        }
+      });
+    }
+
+    const cont = document.querySelector(".container");
+    if(cont){
+      const mo = new MutationObserver(()=> scheduleSave());
+      mo.observe(cont,{childList:true,subtree:true,attributes:true,characterData:true});
+    } else { console.warn('[SYNC] .container não encontrada — MutationObserver não ligado.'); }
+
+    // Expose and hook into setStatus if present (safe)
+    window.AttendanceSync = { listen, saveToFirebase, scheduleSave, lastLocal: ()=> lastLocal };
+
+    // On load, start listening + try a save
+    window.addEventListener("load", ()=>{
+      setTimeout(()=>{ try{ window.AttendanceSync.listen(); window.AttendanceSync.saveToFirebase(); } catch(e){ console.error('[SYNC] startup error', e); } }, 600);
+    });
+
+    const dateEl = document.getElementById("date");
+    if(dateEl) dateEl.addEventListener("change", ()=> { setTimeout(()=> { window.AttendanceSync.listen(); }, 300); });
+
+  })();
+  </script>
+  <!-- FIM Firebase -->
+
+</body>
 </html>

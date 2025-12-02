@@ -135,3 +135,141 @@
 })();
 </script>
 <!-- FIM DO FIREBASE -->
+<!-- Firebase + Sincronização Realtime (versão atualizada) -->
+<script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-database-compat.js"></script>
+
+<script>
+(function(){
+
+  /* ---------- CONFIG DO SEU FIREBASE (CORRIGIDO) ---------- */
+  const FIREBASE_CONFIG = {
+    apiKey: "AIzaSyDq1-T7ADK2B1tOnJQfBegCBWZ2OJcyp5w",
+    authDomain: "lista-presenca-tecnicos.firebaseapp.com",
+    databaseURL: "https://lista-presenca-tecnicos-default-rtdb.firebaseio.com",
+    projectId: "lista-presenca-tecnicos",
+    storageBucket: "lista-presenca-tecnicos.firebasestorage.app",
+    messagingSenderId: "859660776766",
+    appId: "1:859660776766:web:c57292bf8332d99bd5286f"
+  };
+
+  console.log("[FIREBASE] Iniciando…");
+
+  /* ---------- INICIAR FIREBASE ---------- */
+  const app = firebase.initializeApp(FIREBASE_CONFIG);
+  const db  = firebase.database();
+
+  console.log("[FIREBASE] Ok!");
+
+  /* ---------- FUNÇÕES INTERNAS ---------- */
+
+  function getDateKey(){
+    const el = document.getElementById("date");
+    if (!el || !el.value) {
+      return new Date().toISOString().slice(0,10);
+    }
+    return el.value;
+  }
+
+  let saveTimer = null;
+  let lastLocal = "";
+  let lastRemote = "";
+
+  function serialize(obj){
+    try { return JSON.stringify(obj); }
+    catch(e){ return ""; }
+  }
+
+  /* ---------- SALVAR NO FIREBASE ---------- */
+  function saveToFirebase(){
+    const key = getDateKey();
+    const data = window.DATA || {};
+
+    const serialized = serialize(data);
+    if (serialized === lastLocal) return;
+
+    lastLocal = serialized;
+
+    db.ref("attendance/" + key).set({
+      data: data,
+      updatedAt: Date.now()
+    }).then(()=>{
+      console.log("[SYNC] Salvo no Firebase:", key);
+    }).catch(err=>{
+      console.error("[SYNC] Erro ao salvar:", err);
+    });
+  }
+
+  function scheduleSave(){
+    if (saveTimer) clearTimeout(saveTimer);
+    saveTimer = setTimeout(saveToFirebase, 700);
+  }
+
+  /* ---------- OUVIR ATUALIZAÇÕES REMOTAS ---------- */
+  function listen(){
+    const key = getDateKey();
+    console.log("[SYNC] Escutando:", key);
+
+    db.ref("attendance/" + key).on("value", snap=>{
+      if (!snap.exists()) {
+        console.log("[SYNC] Nenhum dado remoto para:", key);
+        return;
+      }
+
+      const val = snap.val();
+      if (!val || !val.data) return;
+
+      const serialized = serialize(val.data);
+
+      if (serialized === lastLocal) {
+        lastRemote = serialized;
+        return;
+      }
+
+      console.log("[SYNC] Atualização remota aplicada:", key);
+
+      lastRemote = serialized;
+      window.DATA = val.data;
+
+      if (typeof window.render === "function") {
+        window.render();
+      }
+    });
+  }
+
+  /* ---------- OBSERVAR ALTERAÇÕES NA TELA ---------- */
+  const mainDiv = document.querySelector(".container");
+  if (mainDiv){
+    const observer = new MutationObserver(()=> scheduleSave());
+    observer.observe(mainDiv, {childList:true, subtree:true, attributes:true});
+  }
+
+  /* ---------- INTERCEPTAR ALTERAÇÕES DE STATUS ---------- */
+  if (typeof window.setStatus === "function"){
+    const old = window.setStatus;
+    window.setStatus = function(supervisor, index, status){
+      old(supervisor, index, status);
+      scheduleSave();
+    };
+  }
+
+  /* ---------- QUANDO TROCAR A DATA ---------- */
+  const dateEl = document.getElementById("date");
+  if(dateEl){
+    dateEl.addEventListener("change", ()=>{
+      setTimeout(()=> listen(), 400);
+    });
+  }
+
+  /* ---------- INICIAR LISTENER ---------- */
+  window.addEventListener("load", ()=>{
+    setTimeout(()=> {
+      listen();
+      saveToFirebase();
+    }, 600);
+  });
+
+})();
+</script>
+<!-- FIM DO FIREBASE -->
+

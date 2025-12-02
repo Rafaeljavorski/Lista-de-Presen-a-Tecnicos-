@@ -276,6 +276,10 @@
       });
     }
 
+    // Expose DATA and render for firebase sync to use directly
+    window.DATA = DATA;
+    window.render = render;
+
     function makeBtn(label, status, active){
       const b = document.createElement('button'); b.className='btn-status'; b.textContent = label;
       if(active) b.classList.add('active');
@@ -414,7 +418,7 @@
   })();
   </script>
 
-  <!-- Firebase Sync seguro (final) -->
+  <!-- Firebase Sync secure -->
   <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-database-compat.js"></script>
 
@@ -486,10 +490,8 @@
       mo.observe(cont,{childList:true,subtree:true,attributes:true,characterData:true});
     } else { console.warn('[SYNC] .container não encontrada — MutationObserver não ligado.'); }
 
-    // Expose and hook into setStatus if present (safe)
     window.AttendanceSync = { listen, saveToFirebase, scheduleSave, lastLocal: ()=> lastLocal };
 
-    // On load, start listening + try a save
     window.addEventListener("load", ()=>{
       setTimeout(()=>{ try{ window.AttendanceSync.listen(); window.AttendanceSync.saveToFirebase(); } catch(e){ console.error('[SYNC] startup error', e); } }, 600);
     });

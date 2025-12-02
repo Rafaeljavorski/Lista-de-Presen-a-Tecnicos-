@@ -134,6 +134,8 @@
 
     // ------- state -------
     let DATA = makeDefault();
+    window.DATA = DATA;        // garante que window.DATA aponte para o mesmo objeto no load
+
     function makeDefault(){
       const out = {};
       Object.keys(INITIAL).forEach(s => {
@@ -146,7 +148,7 @@
     const dateInput = document.getElementById('date');
     const supervisorsDiv = document.getElementById('supervisors');
     const csvBtn = document.getElementById('csvBtn');
-    const resetBtn = document.getElementById('resetBtn');
+    resetBtn.addEventListener('click', ()=>{ DATA = makeDefault(); window.DATA = DATA; render(); window.AttendanceSync && window.AttendanceSync.scheduleSave(); });
     const openAdd = document.getElementById('openAdd');
     const openRemove = document.getElementById('openRemove');
     const openMove = document.getElementById('openMove');

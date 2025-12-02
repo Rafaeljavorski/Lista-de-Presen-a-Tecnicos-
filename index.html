@@ -240,11 +240,18 @@
           right.appendChild(moveBtn); row.appendChild(right); box.appendChild(row);
 
           // status buttons
-          const btns = document.createElement('div'); btns.className='buttons';
-          const bTr = makeBtn('Trabalha','trabalha', t.status === 'trabalha');
+         const bTr = makeBtn('Trabalha','trabalha', t.status === 'trabalha');
+         bTr.onclick = () => setStatus(s, idx, 'trabalha');
+
           const bNa = makeBtn('Não Trabalha','nao', t.status === 'nao');
+          bNa.onclick = () => setStatus(s, idx, 'nao');
+
           const bEn = makeBtn('Entra mais tarde','entra_mais_tarde', t.status === 'entra_mais_tarde');
+          bEn.onclick = () => setStatus(s, idx, 'entra_mais_tarde');
+
           const bSa = makeBtn('Sai mais cedo','sai_mais_cedo', t.status === 'sai_mais_cedo');
+          bSa.onclick = () => setStatus(s, idx, 'sai_mais_cedo');
+
 
           bTr.onclick = ()=> setStatus(s, idx, 'trabalha');
           bNa.onclick = ()=> setStatus(s, idx, 'nao');

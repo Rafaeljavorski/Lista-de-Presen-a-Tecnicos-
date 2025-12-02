@@ -406,82 +406,132 @@
   })();
   </script>
 
-  <!-- Firebase + Sincronização Realtime -->
-  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-database-compat.js"></script>
-  <script>
-  (function(){
-    const FIREBASE_CONFIG = {
-      apiKey: "AIzaSyDq1-T7ADK2B1tOnJQfBegCBWZ2OJcyp5w",
-      authDomain: "lista-presenca-tecnicos.firebaseapp.com",
-      databaseURL: "https://lista-presenca-tecnicos-default-rtdb.firebaseio.com",
-      projectId: "lista-presenca-tecnicos",
-      storageBucket: "lista-presenca-tecnicos.firebasestorage.app",
-      messagingSenderId: "859660776766",
-      appId: "1:859660776766:web:c57292bf8332d99bd5286f"
-    };
+  <!-- Firebase + Sincronização Realtime (substituição segura) -->
+<script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-database-compat.js"></script>
 
-    const app = firebase.initializeApp(FIREBASE_CONFIG);
-    const db  = firebase.database();
+<script>
+(function(){
+  // === seu config (mantive o que você já usou) ===
+  const FIREBASE_CONFIG = {
+    apiKey: "AIzaSyDq1-T7ADK2B1tOnJQfBegCBWZ2OJcyp5w",
+    authDomain: "lista-presenca-tecnicos.firebaseapp.com",
+    databaseURL: "https://lista-presenca-tecnicos-default-rtdb.firebaseio.com",
+    projectId: "lista-presenca-tecnicos",
+    storageBucket: "lista-presenca-tecnicos.firebasestorage.app",
+    messagingSenderId: "859660776766",
+    appId: "1:859660776766:web:c57292bf8332d99bd5286f"
+  };
 
-    function getDateKey(){
-      const el = document.getElementById("date");
-      return el && el.value ? el.value : new Date().toISOString().slice(0,10);
-    }
+  const app = firebase.initializeApp(FIREBASE_CONFIG);
+  const db  = firebase.database();
 
-    let saveTimer = null;
-    let lastLocal = "";
-    function serialize(o){ try{return JSON.stringify(o);}catch(e){return"";} }
+  function getDateKey(){
+    const el = document.getElementById("date");
+    return el && el.value ? el.value : new Date().toISOString().slice(0,10);
+  }
 
-    function saveToFirebase(){
+  let saveTimer = null;
+  let lastLocal = "";
+  function serialize(obj){ try{ return JSON.stringify(obj); } catch(e){ return ""; } }
+
+  // --- sanitize and save (removes undefined automatically) ---
+  async function saveToFirebase(){
+    try{
       const key = getDateKey();
       const data = window.DATA || {};
-      const s = serialize(data);
-      if(s===lastLocal) return;
-      lastLocal = s;
-      db.ref("attendance/"+key).set({data,updatedAt:Date.now()}).then(()=>{
-        console.log("[SYNC] Salvo no Firebase:", key);
-      }).catch(err=>{
-        console.error("[SYNC] Erro ao salvar:", err);
+      // remove undefined and non-serializables
+      const safeData = JSON.parse(JSON.stringify(data));
+      const serialized = serialize(safeData);
+      if(serialized === lastLocal) return; // nothing changed
+      lastLocal = serialized;
+
+      await db.ref("attendance/" + key).set({
+        data: safeData,
+        updatedAt: Date.now()
       });
+      console.log("[SYNC] Salvo no Firebase:", key);
+    }catch(err){
+      console.error("[SYNC] Erro ao salvar:", err);
     }
-    function scheduleSave(){
-      clearTimeout(saveTimer);
-      saveTimer=setTimeout(saveToFirebase,700);
-    }
+  }
 
-    function listen(){
-      const key=getDateKey();
-      db.ref("attendance/"+key).on("value",snap=>{
-        if(!snap.exists()) return;
-        const val=snap.val();
-        if(!val||!val.data) return;
-        const s=serialize(val.data);
-        if(s===lastLocal) return;
-        window.DATA=val.data;
-        if(window.render) window.render();
-        console.log("[SYNC] Aplicado update remoto:", key);
-      });
-    }
+  function scheduleSave(){
+    if(saveTimer) clearTimeout(saveTimer);
+    saveTimer = setTimeout(()=> { saveTimer = null; saveToFirebase(); }, 700);
+  }
 
-    const cont=document.querySelector(".container");
-    if(cont){
-      new MutationObserver(scheduleSave).observe(cont,{childList:true,subtree:true,attributes:true});
-    }
+  // --- listen for remote updates and apply safely ---
+  function listen(){
+    const key = getDateKey();
+    console.log("[SYNC] Escutando:", key);
+    const ref = db.ref("attendance/" + key);
+    // detach previous listeners for safety
+    try{ ref.off(); } catch(e){}
+    ref.on("value", snap => {
+      if(!snap.exists()) {
+        console.log("[SYNC] Nenhum dado remoto para:", key);
+        return;
+      }
+      const val = snap.val();
+      if(!val || typeof val.data === 'undefined') return;
+      const safe = val.data;
+      const serialized = serialize(safe);
+      if(serialized === lastLocal) {
+        // remote equals local -> avoid loop
+        lastLocal = serialized;
+        return;
+      }
+      lastLocal = serialized;
+      window.DATA = safe;
+      console.log("[SYNC] Aplicado update remoto:", key);
+      if(typeof window.render === "function") {
+        try{ window.render(); } catch(e){ console.error('render error', e); }
+      }
+    });
+  }
 
-    if(window.setStatus){
-      const old=window.setStatus;
-      window.setStatus=function(s,i,st){
-        old(s,i,st);
-        scheduleSave();
-      };
-    }
+  // --- monitor DOM/state changes to schedule saves ---
+  const cont = document.querySelector(".container");
+  if(cont){
+    const mo = new MutationObserver(()=> scheduleSave());
+    mo.observe(cont,{childList:true,subtree:true,attributes:true,characterData:true});
+  } else {
+    console.warn('[SYNC] .container não encontrada — MutationObserver não ligado.');
+  }
 
-    window.addEventListener("load",()=>{setTimeout(()=>{listen();saveToFirebase();},600);});
-    document.getElementById("date")?.addEventListener("change",()=>setTimeout(listen,400));
-  })();
-  </script>
-  <!-- FIM Firebase -->
+  // --- intercept setStatus if exists to trigger save immediately ---
+  if(typeof window.setStatus === "function"){
+    const _orig = window.setStatus;
+    window.setStatus = function(...args){
+      const res = _orig.apply(this, args);
+      scheduleSave();
+      return res;
+    };
+  }
 
-</body>
+  // --- expose API for manual control and ensure startup ---
+  window.AttendanceSync = {
+    listen,
+    saveToFirebase,
+    scheduleSave,
+    lastLocal: ()=> lastLocal
+  };
+
+  // on load, start listening + try a save (debounced)
+  window.addEventListener("load", ()=>{
+    setTimeout(()=>{
+      try{ window.AttendanceSync.listen(); window.AttendanceSync.saveToFirebase(); }
+      catch(e){ console.error('[SYNC] error during startup', e); }
+    }, 600);
+  });
+
+  // re-listen when date changes
+  const dateEl = document.getElementById("date");
+  if(dateEl) dateEl.addEventListener("change", ()=> { setTimeout(()=> { window.AttendanceSync.listen(); }, 300); });
+
+})();
+</script>
+<!-- FIM: Firebase Sync seguro -->
+
 </html>

@@ -1,0 +1,528 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Lista Diária — Técnicos (Admin)</title>
+  <style>
+    :root{--bg:#f6f7fb;--card:#fff;--muted:#667085;--accent:#0ea5a4;--danger:#ef4444;--ok:#10b981}
+    html,body{height:100%;margin:0;font-family:Inter,system-ui,Arial,sans-serif;background:var(--bg);color:#0f172a}
+    .container{max-width:980px;margin:12px auto;padding:12px}
+    header{display:flex;gap:12px;align-items:center}
+    h1{font-size:18px;margin:0}
+    p.small{margin:0;color:var(--muted);font-size:13px}
+    .controls{display:flex;gap:8px;margin:12px 0;flex-wrap:wrap}
+    input[type=date]{padding:8px;border-radius:8px;border:1px solid #e6e9ef}
+    button{padding:10px 12px;border-radius:8px;border:0;background:var(--accent);color:#fff;font-weight:600}
+    button.ghost{background:#fff;color:#0f172a;border:1px solid #e6e9ef}
+    .card{background:var(--card);border-radius:12px;padding:12px;box-shadow:0 6px 18px rgba(7,12,34,0.06);margin-bottom:12px}
+    .row{display:flex;gap:8px;align-items:center}
+    .sup-title{font-weight:700;margin-bottom:8px;display:flex;align-items:center;gap:8px}
+    .legend{display:flex;gap:8px;align-items:center;margin-left:16px}
+    .legend .pill{padding:6px 8px;border-radius:8px;background:#fff;border:1px solid #e6e9ef;font-weight:600;font-size:13px}
+    .pill.trab{background:var(--ok);color:#fff;border-color:var(--ok)}
+    .pill.nao{background:var(--danger);color:#fff;border-color:var(--danger)}
+    .pill.entra{background:#f59e0b;color:#fff;border-color:#f59e0b}
+    .pill.sai{background:#f97316;color:#fff;border-color:#f97316}
+    .tech{border-radius:10px;padding:10px;border:1px solid #f0f2f6;margin-bottom:8px}
+    .tech .name{font-weight:600;color:#0f172a}
+    .buttons{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-top:8px}
+    .btn-status{padding:8px;border-radius:8px;border:1px solid #e6e9ef;background:#fff;font-weight:600}
+    .btn-trabalha.active{background:var(--ok);border-color:var(--ok);color:#fff}
+    .btn-nao.active{background:var(--danger);border-color:var(--danger);color:#fff}
+    .btn-entra.active{background:#f59e0b;border-color:#f59e0b;color:#fff}
+    .btn-sai.active{background:#f97316;border-color:#f97316;color:#fff}
+    input[type=time], input[type=text]{padding:8px;border-radius:8px;border:1px solid #e6e9ef;width:100%}
+    textarea{width:100%;padding:8px;border-radius:8px;border:1px solid #e6e9ef}
+    .flex{display:flex;gap:8px}
+    .chart{height:34px;border-radius:8px;background:#eef2f5;position:relative;margin-top:8px}
+    .chart .active{height:100%;background:linear-gradient(90deg,#10b981,#059669);border-radius:8px 0 0 8px}
+    .chart .inactive{height:100%;background:linear-gradient(90deg,#f97316,#fb923c);position:absolute;right:0;top:0;border-radius:0 8px 8px 0}
+    .small-muted{font-size:12px;color:var(--muted)}
+    .filterBar button{background:#fff;color:#0f172a;border:1px solid #e6e9ef;padding:8px 10px;border-radius:8px;font-weight:600}
+    .modal-backdrop{position:fixed;inset:0;background:rgba(7,12,34,0.45);display:none;align-items:center;justify-content:center;padding:12px;z-index:40}
+    .modal{background:#fff;border-radius:12px;width:100%;max-width:520px;padding:16px;box-shadow:0 12px 40px rgba(2,6,23,0.25)}
+    .modal h3{margin:0 0 8px 0}
+    .list-select{max-height:220px;overflow:auto;border:1px solid #eef2f5;padding:8px;border-radius:8px;margin-bottom:8px}
+    .list-item{padding:8px;border-radius:8px;border:1px solid transparent;margin-bottom:6px}
+    .list-item:hover{background:#f8fafc;border-color:#e6eef2f}
+    .admin-badge{background:#0b7285;color:#fff;padding:6px 10px;border-radius:999px;font-weight:700}
+    @media(min-width:800px){.buttons{grid-template-columns:repeat(4,140px)} }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div>
+        <h1>Lista Diária — Técnicos</h1>
+        <p class="small">Com controle de administrador para adicionar/excluir/mover.</p>
+      </div>
+      <div style="margin-left:auto;display:flex;gap:8px;align-items:center">
+        <div id="adminIndicator" style="display:none" class="admin-badge">ADMIN</div>
+        <button id="adminToggle" class="ghost">Entrar Admin</button>
+      </div>
+    </header>
+
+    <div class="controls">
+      <input id="date" type="date" />
+      <button id="csvBtn">Exportar CSV</button>
+      <button id="resetBtn" class="ghost">Resetar</button>
+      <button id="openAdd" class="ghost" data-admin="true" title="Adicionar técnico (requer admin)">Adicionar</button>
+      <button id="openRemove" class="ghost" data-admin="true" title="Excluir técnico (requer admin)">Excluir</button>
+      <button id="openMove" class="ghost" data-admin="true" title="Mover técnico (requer admin)">Mover</button>
+    </div>
+
+    <div id="filterBar" class="controls filterBar" style="margin-bottom:8px"></div>
+
+    <div class="card" id="overview">
+      <div class="row">
+        <div>
+          <div class="small-muted">Técnicos totais</div>
+          <div id="total" style="font-weight:700;font-size:18px">0</div>
+        </div>
+        <div style="margin-left:16px">
+          <div class="small-muted">Ativos</div>
+          <div id="active" style="font-weight:700;font-size:18px">0</div>
+        </div>
+        <div style="margin-left:16px">
+          <div class="small-muted">Não ativos</div>
+          <div id="inactive" style="font-weight:700;font-size:18px">0</div>
+        </div>
+        <div style="margin-left:auto;text-align:right">
+          <div class="small-muted">Ativos %</div>
+          <div id="pct" style="font-weight:700;font-size:18px">0%</div>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;margin-top:10px">
+        <div class="legend">
+          <div class="pill trab">Trabalha</div>
+          <div class="pill nao">Não</div>
+          <div class="pill entra">Entra mais tarde</div>
+          <div class="pill sai">Sai mais cedo</div>
+        </div>
+      </div>
+      <div class="chart" aria-hidden>
+        <div id="chartActive" class="active" style="width:0%"></div>
+        <div id="chartInactive" class="inactive" style="width:0%"></div>
+      </div>
+    </div>
+
+    <div id="supervisors"></div>
+  </div>
+
+  <!-- Modal backdrop -->
+  <div id="modalBackdrop" class="modal-backdrop" role="dialog" aria-hidden="true">
+    <div class="modal" id="modal">
+      <h3 id="modalTitle">Modal</h3>
+      <div id="modalBody"></div>
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px">
+        <button id="modalCancel" class="ghost">Cancelar</button>
+        <button id="modalConfirm">Confirmar</button>
+      </div>
+    </div>
+  </div>
+
+<script>
+(function(){
+  // === CONFIG ===
+  const ADMIN_PASSWORD = 'admin123';
+
+  // full initial lists
+  const INITIAL = {
+    Lucas:[
+      'CIP _ RAFAEL GIELINSKI','CIP _ ADILSON DOS SANTOS MARQUES','CIP _ ADONIS TOLEDO PEDROSO',
+      'CIP _ ADRIANO JOAO LINO ROCHA','CIP _ DIEGO FELIZARDO DE OLIVEIRA','CIP _ ENEIAS ODIM DA LUZ',
+      'CIP _ ERICO LEANDRO ROSA','CIP _ JOSE CARLOS ZACARIAS','CIP _ LEONARDO FERNANDES LUCAS',
+      'CIP _ LUCIANO ANDRÉ DE OLIVEIRA','CIP _ ROBSON QUADROS DE LIMA','CIP _ SANDRO MATHEUS SOARES',
+      'CIP _ ADINILSON PETROLINI DE SOUSA'
+    ],
+    Israel:[
+      'CIP _ ADRIANO CRUZ','CIP _ ARLYSOM PIMENTEL DO NASCIMENTO','CIP _ CLEITON SAMONEK',
+      'CIP _ EDUARDO DE LIMA RIBEIRO ALEGRO','CIP _ GIL VICENTE ADAO','CIP _ GILSON RISKE',
+      'CIP _ GIOVAN PUERTA PEREIRA DINO','CIP _ JHONATAN WILLIAN PORTO KOCHOLIK','CIP _ LUCAS MARINHAK',
+      'CIP _ MAGNUM QUADROS CUSTODIA','CIP _ MAURICIO CARLOS LUCAS','CIP _ RENATO GODINHO DOS SANTOS',
+      'CIP _ RICHARD BRAYAN SOUZA TIOTONIO','CIP _ TIAGO DOS SANTOS','CIP _ WELLINGTON FORMIGHIERI DA SILVA',
+      'CIP _ WELLINGTON MOYSES BATISTA GLOVAT','CIP _ WERYCLES GILBERTO DE OLIVEIRA PEREIRA'
+    ],
+    Litoral:[
+      'CIP _ ADRIANO ANIGNSKI FRAGOSO','CIP _ ALAN GOMES DE OLIVEIRA','CIP _ ANDERSON FRANCISCO AGOSTINHO',
+      'CIP _ CRISTIANO ALAN VIEIRA','CIP _ DEIVIDY FERREIRA DO AMARA','CIP _ DIONATAN EVERTON WOZNHAK FRANCA DA',
+      'CIP _ IVANIR QUARESMA','CIP _ KLEBER FERREIRA','CIP _ LUCAS FERREIRA DA SILVA',
+      'CIP _ NATAN HENRIQUE BETIM','CIP _ ROBSON MARCELO DE OLIVEIRA BRAVO'
+    ]
+  };
+
+  // state
+  let DATA = makeDefault();
+  let isAdmin = false;
+
+  function makeDefault(){
+    const out = {};
+    Object.keys(INITIAL).forEach(s => out[s] = INITIAL[s].map(n=>({name:n,status:'pendente',time:'',note:''})));
+    return out;
+  }
+
+  // dom refs
+  const adminToggle = document.getElementById('adminToggle');
+  const adminIndicator = document.getElementById('adminIndicator');
+  const openAdd = document.getElementById('openAdd');
+  const openRemove = document.getElementById('openRemove');
+  const openMove = document.getElementById('openMove');
+
+  const dateInput = document.getElementById('date');
+  const supervisorsDiv = document.getElementById('supervisors');
+  const csvBtn = document.getElementById('csvBtn');
+  const resetBtn = document.getElementById('resetBtn');
+  const filterBar = document.getElementById('filterBar');
+
+  const totalEl = document.getElementById('total');
+  const activeEl = document.getElementById('active');
+  const inactiveEl = document.getElementById('inactive');
+  const pctEl = document.getElementById('pct');
+  const chartActive = document.getElementById('chartActive');
+  const chartInactive = document.getElementById('chartInactive');
+
+  const modalBackdrop = document.getElementById('modalBackdrop');
+  const modalTitle = document.getElementById('modalTitle');
+  const modalBody = document.getElementById('modalBody');
+  const modalCancel = document.getElementById('modalCancel');
+  const modalConfirm = document.getElementById('modalConfirm');
+
+  // date
+  function todayISO(){ return (new Date()).toISOString().slice(0,10); }
+  dateInput.value = todayISO();
+
+  // filters
+  let currentFilter = null;
+  function buildFilterButtons(){
+    filterBar.innerHTML = '';
+    const btnAll = document.createElement('button'); btnAll.textContent='Todos'; btnAll.className='ghost';
+    btnAll.onclick = ()=>{ currentFilter = null; render(); };
+    filterBar.appendChild(btnAll);
+    Object.keys(INITIAL).forEach(s=>{
+      const b = document.createElement('button'); b.textContent = s; b.className='ghost';
+      b.onclick = ()=>{ currentFilter = (currentFilter===s? null: s); render(); };
+      filterBar.appendChild(b);
+    });
+  }
+  buildFilterButtons();
+
+  function render(){
+    supervisorsDiv.innerHTML = '';
+    let total=0, active=0, inactive=0;
+    Object.keys(DATA).forEach(s=>{
+      if(currentFilter && currentFilter !== s) return;
+      DATA[s].forEach(t=>{ total++; if(t.status==='nao' || t.status==='pendente') inactive++; else active++; });
+    });
+    totalEl.textContent = String(total);
+    activeEl.textContent = String(active);
+    inactiveEl.textContent = String(inactive);
+    const pct = total ? Math.round((active/total)*100) : 0;
+    pctEl.textContent = pct + '%';
+    chartActive.style.width = pct + '%';
+    chartInactive.style.width = (100 - pct) + '%';
+
+    Array.from(filterBar.children).forEach(b => b.classList.toggle('filter-active', b.textContent === currentFilter));
+
+    Object.keys(DATA).filter(s=>!currentFilter||currentFilter===s).forEach(s=>{
+      const supList = DATA[s];
+      const supTotal = supList.length;
+      const supActive = supList.reduce((acc,t)=> acc + ((t.status && t.status!=='nao' && t.status!=='pendente')?1:0), 0);
+      const supPct = supTotal ? Math.round((supActive/supTotal)*100) : 0;
+
+      const card = document.createElement('div'); card.className='card';
+      const title = document.createElement('div'); title.className='sup-title';
+      const titleText = document.createElement('div'); titleText.textContent = s; title.appendChild(titleText);
+      const pctSmall = document.createElement('div'); pctSmall.className='small-muted'; pctSmall.style.marginLeft='auto';
+      pctSmall.textContent = supActive + '/' + supTotal + ' • ' + supPct + '%'; title.appendChild(pctSmall);
+
+      const miniChart = document.createElement('div'); miniChart.className='chart'; miniChart.style.height='12px'; miniChart.style.marginTop='6px';
+      const a = document.createElement('div'); a.className='active'; a.style.width = supPct + '%'; a.style.height='100%';
+      const i = document.createElement('div'); i.className='inactive'; i.style.width = (100 - supPct) + '%'; i.style.height='100%';
+      miniChart.appendChild(a); miniChart.appendChild(i);
+
+      card.appendChild(title); card.appendChild(miniChart);
+
+      supList.forEach((t, idx)=>{
+        const box = document.createElement('div'); box.className='tech';
+        const row = document.createElement('div'); row.className='row';
+        const left = document.createElement('div'); left.style.flex='1';
+        const nm = document.createElement('div'); nm.className='name'; nm.textContent = t.name || '(sem nome)'; left.appendChild(nm);
+        const noteSmall = document.createElement('div'); noteSmall.className='small-muted'; noteSmall.textContent = t.note || ''; left.appendChild(noteSmall);
+        row.appendChild(left);
+
+        const right = document.createElement('div'); right.style.width='120px'; right.style.textAlign='right';
+        const moveBtn = document.createElement('button'); moveBtn.className='ghost'; moveBtn.textContent='Mover';
+        moveBtn.title = 'Mover técnico (requer admin)';
+        moveBtn.onclick = ()=> { requireAdmin(()=> openMoveModal(s, idx)); };
+        right.appendChild(moveBtn); row.appendChild(right); box.appendChild(row);
+
+        const btns = document.createElement('div'); btns.className='buttons';
+        const bTr = makeBtn('Trabalha','trabalha', t.status === 'trabalha'); bTr.title='Marca como trabalhando';
+        const bNa = makeBtn('Não Trabalha','nao', t.status === 'nao'); bNa.title='Marca como não trabalha';
+        const bEn = makeBtn('Entra mais tarde','entra_mais_tarde', t.status === 'entra_mais_tarde'); bEn.title='Marca que entra mais tarde';
+        const bSa = makeBtn('Sai mais cedo','sai_mais_cedo', t.status === 'sai_mais_cedo'); bSa.title='Marca que sai mais cedo';
+
+        bTr.onclick = ()=> setStatus(s, idx, 'trabalha');
+        bNa.onclick = ()=> setStatus(s, idx, 'nao');
+        bEn.onclick = ()=> setStatus(s, idx, 'entra_mais_tarde');
+        bSa.onclick = ()=> setStatus(s, idx, 'sai_mais_cedo');
+
+        btns.appendChild(bTr); btns.appendChild(bNa); btns.appendChild(bEn); btns.appendChild(bSa);
+        box.appendChild(btns);
+
+        if(t.status === 'entra_mais_tarde' || t.status === 'sai_mais_cedo'){
+          const flex = document.createElement('div'); flex.className='flex'; flex.style.marginTop='8px';
+          const time = document.createElement('input'); time.type='time'; time.value = t.time || '';
+          time.onchange = (e)=> { t.time = e.target.value; };
+          flex.appendChild(time); box.appendChild(flex);
+        }
+
+        const note = document.createElement('textarea'); note.placeholder='Observação / motivo'; note.value = t.note || '';
+        note.onchange = (e)=> { t.note = e.target.value; };
+        note.style.marginTop='8px'; box.appendChild(note);
+
+        card.appendChild(box);
+      });
+
+      supervisorsDiv.appendChild(card);
+    });
+  }
+
+  function makeBtn(label, status, active){
+    const b = document.createElement('button'); b.className = 'btn-status'; b.textContent = label;
+    if(active) b.classList.add('active');
+    if(status === 'trabalha') b.classList.add('btn-trabalha');
+    if(status === 'nao') b.classList.add('btn-nao');
+    if(status === 'entra_mais_tarde') b.classList.add('btn-entra');
+    if(status === 'sai_mais_cedo') b.classList.add('btn-sai');
+    return b;
+  }
+
+  function setStatus(s, idx, status){
+    DATA[s][idx].status = status;
+    if(status !== 'entra_mais_tarde' && status !== 'sai_mais_cedo') DATA[s][idx].time = '';
+    render();
+  }
+
+  function exportCSV(){
+    const rows = [['Date','Supervisor','Technician','Status','TimeAdjustment','Note']];
+    const date = dateInput.value;
+    Object.keys(DATA).forEach(s=>{ DATA[s].forEach(t => rows.push([date,s,t.name,t.status,t.time||'',t.note||''])); });
+    const csv = rows.map(r => r.map(c => '\"' + String(c).replace(/\"/g,'\"\"') + '\"').join(',')).join('\r\n');
+    const blob = new Blob([csv],{type:'text/csv;charset=utf-8;'}); const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = 'presenca_' + date + '.csv'; a.click(); URL.revokeObjectURL(url);
+  }
+
+  csvBtn.addEventListener('click', exportCSV);
+  resetBtn.addEventListener('click', ()=>{ DATA = makeDefault(); render(); });
+
+  // admin
+  function requireAdmin(onSuccess){
+    if(isAdmin){ onSuccess(); return; }
+    const body = document.createElement('div');
+    const inp = document.createElement('input'); inp.type='password'; inp.placeholder='Senha de administrador'; inp.style.width='100%'; inp.style.padding='8px';
+    body.appendChild(inp);
+    openModal('Acesso administrador', body, 'Entrar', ()=>{
+      if(inp.value === ADMIN_PASSWORD){ isAdmin = true; adminIndicator.style.display='inline-block'; adminToggle.textContent='Bloquear Admin'; onSuccess(); }
+      else { alert('Senha incorreta'); }
+    });
+  }
+
+  adminToggle.onclick = ()=>{
+    if(isAdmin){ isAdmin=false; adminIndicator.style.display='none'; adminToggle.textContent='Entrar Admin'; }
+    else { requireAdmin(()=>{ render(); }); }
+  };
+
+  // modal helpers
+  function openModal(title, bodyNode, confirmLabel='Confirmar', onConfirm){
+    modalTitle.textContent = title; modalBody.innerHTML=''; modalBody.appendChild(bodyNode);
+    modalBackdrop.style.display='flex'; modalBackdrop.setAttribute('aria-hidden','false'); modalConfirm.textContent = confirmLabel;
+    function cleanup(){ modalBackdrop.style.display='none'; modalBackdrop.setAttribute('aria-hidden','true'); modalConfirm.onclick=null; modalCancel.onclick=null; }
+    modalCancel.onclick = ()=>{ cleanup(); };
+    modalConfirm.onclick = ()=>{ try{ onConfirm(); } finally { cleanup(); } };
+  }
+
+  // add/remove/move modals (require admin where used)
+  openAdd.onclick = ()=>{ requireAdmin(()=> openAddModal()); };
+  function openAddModal(){
+    const body = document.createElement('div');
+    const supSel = document.createElement('select'); supSel.style.width='100%'; supSel.style.padding='8px'; supSel.style.marginBottom='8px';
+    Object.keys(INITIAL).forEach(s=>{ const opt=document.createElement('option'); opt.value=s; opt.textContent=s; supSel.appendChild(opt); });
+    const nameInp = document.createElement('input'); nameInp.placeholder='Nome do técnico'; nameInp.style.width='100%'; nameInp.style.padding='8px';
+    body.appendChild(supSel); body.appendChild(nameInp);
+    openModal('Adicionar Técnico', body, 'Adicionar', ()=>{
+      const sup=supSel.value; const name = nameInp.value && nameInp.value.trim();
+      if(!name) return alert('Informe um nome válido.');
+      DATA[sup].push({ name, status:'pendente', time:'', note:'' }); render();
+    });
+  }
+
+  openRemove.onclick = ()=>{ requireAdmin(()=> openRemoveModal()); };
+  function openRemoveModal(){
+    const body = document.createElement('div');
+    const supSel = document.createElement('select'); supSel.style.width='100%'; supSel.style.padding='8px'; supSel.style.marginBottom='8px';
+    Object.keys(INITIAL).forEach(s=>{ const opt=document.createElement('option'); opt.value=s; opt.textContent=s; supSel.appendChild(opt); });
+    const listDiv = document.createElement('div'); listDiv.className='list-select';
+    function refreshList(){ listDiv.innerHTML=''; const arr = DATA[supSel.value]||[]; if(arr.length===0){ listDiv.textContent='Sem técnicos.'; return; } arr.forEach((t,i)=>{ const el=document.createElement('div'); el.className='list-item'; el.textContent=(i+1)+' — '+t.name; el.dataset.idx=i; el.onclick=()=>{ Array.from(listDiv.children).forEach(c=>c.style.background=''); el.style.background='#eef7f6'; listDiv.dataset.chosenIdx=i; }; listDiv.appendChild(el); }); }
+    supSel.onchange = refreshList; refreshList();
+    body.appendChild(supSel); body.appendChild(listDiv);
+    openModal('Excluir Técnico', body, 'Excluir', ()=>{ const idx=parseInt(listDiv.dataset.chosenIdx,10); if(Number.isNaN(idx)) return alert('Escolha um técnico.'); DATA[supSel.value].splice(idx,1); render(); });
+  }
+
+  function openMoveModal(fromSup, idx){
+    const body = document.createElement('div');
+    const info = document.createElement('div'); info.className='small-muted'; info.style.marginBottom='8px';
+    info.textContent = 'Mover: ' + (DATA[fromSup][idx]?.name || '(sem nome)') + ' — de ' + fromSup;
+    const toSel = document.createElement('select'); toSel.style.width='100%'; toSel.style.padding='8px'; toSel.style.marginBottom='8px';
+    Object.keys(INITIAL).forEach(s=>{ if(s===fromSup) return; const opt=document.createElement('option'); opt.value=s; opt.textContent=s; toSel.appendChild(opt); });
+    body.appendChild(info); body.appendChild(toSel);
+    openModal('Mover Técnico', body, 'Mover', ()=>{ const to = toSel.value; if(!to) return; const item = DATA[fromSup].splice(idx,1)[0]; DATA[to].push(item); render(); });
+  }
+
+  openMove.onclick = ()=>{ requireAdmin(()=> openMoveChooser()); };
+  function openMoveChooser(){
+    const body = document.createElement('div');
+    const desc = document.createElement('div'); desc.className='small-muted'; desc.textContent='Toque no técnico para selecionar (origem).';
+    const listDiv = document.createElement('div'); listDiv.className='list-select'; listDiv.style.maxHeight='300px';
+    Object.keys(DATA).forEach(s=>{ DATA[s].forEach((t,i)=>{ const el=document.createElement('div'); el.className='list-item'; el.textContent = s + ' — ' + t.name; el.dataset.from = s; el.dataset.idx=i; el.onclick = ()=>{ modalBackdrop.style.display='none'; openMoveModal(el.dataset.from, parseInt(el.dataset.idx,10)); }; listDiv.appendChild(el); }); });
+    body.appendChild(desc); body.appendChild(listDiv);
+    openModal('Mover Técnico (selecione origem)', body, 'Fechar', ()=>{});
+  }
+
+  dateInput.addEventListener('change', render);
+  render();
+
+})();
+</script>
+
+
+<!-- Firebase sync (Realtime Database) - add your Firebase config below -->
+<!-- Steps: 1) Create Firebase project at https://console.firebase.google.com  -->
+<!-- 2) Add a Web App and copy the config object. Replace FIREBASE_CONFIG below. -->
+<!-- 3) In Database -> Realtime Database create a database and set rules appropriately for your use case. -->
+<script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-database-compat.js"></script>
+<script>
+(function(){
+  // ====== CONFIG: REPLACE with your Firebase web app config ======
+  const FIREBASE_CONFIG = {
+    apiKey: "YOUR_API_KEY",
+    authDomain: "YOUR_PROJECT.firebaseapp.com",
+    databaseURL: "https://YOUR_PROJECT-default-rtdb.firebaseio.com",
+    projectId: "YOUR_PROJECT",
+    storageBucket: "YOUR_PROJECT.appspot.com",
+    messagingSenderId: "SENDER_ID",
+    appId: "APP_ID"
+  };
+  // =============================================================
+
+  // simple safety check
+  if(FIREBASE_CONFIG.apiKey.startsWith('YOUR_')){
+    console.warn('Firebase config not replaced yet. Realtime sync is disabled until you set FIREBASE_CONFIG.');
+    return;
+  }
+
+  // initialize Firebase (compat libs used to keep simple global firebase namespace)
+  const app = firebase.initializeApp(FIREBASE_CONFIG);
+  const db = firebase.database();
+
+  // helper: get selected date (format yyyy-mm-dd)
+  function getDateKey(){
+    const el = document.getElementById('date');
+    return el && el.value ? el.value : (new Date()).toISOString().slice(0,10);
+  }
+
+  // debounce save
+  let saveTimer = null;
+  let lastLocalSerialized = '';
+  let lastRemoteSerialized = '';
+
+  function serializeData(data){
+    try{ return JSON.stringify(data); }catch(e){ return String(data); }
+  }
+
+  function scheduleSave(delay=900){
+    if(saveTimer) clearTimeout(saveTimer);
+    saveTimer = setTimeout(()=>{ saveTimer = null; saveToFirebase(); }, delay);
+  }
+
+  function saveToFirebase(){
+    try{
+      const key = getDateKey();
+      const payload = window.DATA || {};
+      const serialized = serializeData(payload);
+      // avoid unnecessary writes
+      if(serialized === lastLocalSerialized) return;
+      lastLocalSerialized = serialized;
+      // include a timestamp to help other clients detect fresh updates
+      db.ref('attendance/' + key).set({data: payload, updatedAt: Date.now()}).catch(e=>console.error('Save failed',e));
+      console.log('Saved attendance to Firebase for', key);
+    }catch(e){ console.error(e); }
+  }
+
+  function startListening(){
+    const key = getDateKey();
+    const ref = db.ref('attendance/' + key);
+    ref.on('value', snap => {
+      if(!snap.exists()) return;
+      const val = snap.val();
+      if(!val || !val.data) return;
+      const serialized = serializeData(val.data);
+      // if identical to last local save, ignore (prevents loops)
+      if(serialized === lastLocalSerialized) { lastRemoteSerialized = serialized; return; }
+      // apply remote state
+      window.DATA = val.data;
+      lastRemoteSerialized = serialized;
+      try{ if(typeof window.render === 'function') window.render(); }
+      catch(e){ console.error('Error rendering after remote update', e); }
+      console.log('Applied remote update for', key);
+    });
+  }
+
+  // re-listen when date changes
+  document.getElementById('date').addEventListener('change', ()=>{
+    // small delay to allow render to run first, then listen & save
+    setTimeout(()=>{ startListening(); scheduleSave(500); }, 300);
+  });
+
+  // Hook into main mutation events to detect local changes (so we can save)
+  const container = document.querySelector('.container');
+  if(container){
+    const mo = new MutationObserver(()=>{ scheduleSave(); });
+    mo.observe(container, {childList:true, subtree:true, attributes:true, characterData:true});
+  }
+
+  // Wrap setStatus to trigger save on local updates
+  if(window.setStatus && typeof window.setStatus === 'function'){
+    const __origSetStatus = window.setStatus;
+    window.setStatus = function(s, idx, status){
+      const res = __origSetStatus.apply(this, arguments);
+      scheduleSave();
+      return res;
+    };
+  }
+
+  // ensure reset and CSV actions trigger save
+  const resetBtn = document.getElementById('resetBtn');
+  if(resetBtn) resetBtn.addEventListener('click', ()=>{ scheduleSave(400); });
+
+  // start listening initially after small delay to allow original script to setup DATA & render
+  window.addEventListener('load', ()=>{
+    setTimeout(()=>{ try{ startListening(); scheduleSave(1200); }catch(e){console.error(e);} }, 800);
+  });
+
+  // expose small API for manual control in console if needed
+  window.__attendanceSync = {
+    save: saveToFirebase,
+    listen: startListening,
+    lastLocal: ()=> lastLocalSerialized,
+    lastRemote: ()=> lastRemoteSerialized
+  };
+
+})();
+</script>
+<!-- end Firebase sync -->
+
+</body>
+</html>

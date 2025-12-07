@@ -419,7 +419,15 @@
     openModal('Mover Técnico (selecione origem)', body, 'Fechar', ()=>{});
   }
 
-  dateInput.addEventListener('change', ()=>{ render(); startListening(); });
+  dateInput.addEventListener('change', ()=>{
+    // Ao mudar a data: resetamos o estado local para evitar mostrar os dados
+    // da data anterior enquanto aguardamos o Firebase. Em seguida tentamos
+    // ouvir o nó correspondente à nova data.
+    DATA = makeDefault();
+    window.DATA = DATA;
+    render();
+    startListening();
+  });
 
   // ---------- Firebase sync ----------
   let firebaseApp = null;
@@ -475,15 +483,26 @@
     initFirebaseIfNeeded();
     if(!db) return;
     const key = getDateKey();
+    // se já estivermos ouvindo a mesma chave, não reconfigura
     if(currentRef && currentListenKey === key){
-      return; // já ouvindo a mesma chave
+      return;
     }
+    // remove listener anterior se existir
     if(currentRef) currentRef.off();
     currentListenKey = key;
     const ref = db.ref('attendance/' + key);
     currentRef = ref;
     ref.on('value', snap => {
-      if(!snap.exists()) return;
+      // Se não existir dado remoto para a data, garantimos que o estado local
+      // fique vazio (default) — isso evita que a data anterior seja mantida.
+      if(!snap.exists()){
+        DATA = makeDefault();
+        window.DATA = DATA;
+        lastRemoteSerialized = '';
+        try{ render(); }catch(e){ console.error('Error rendering after empty remote', e); }
+        console.log('No remote data for', key, '- using default state');
+        return;
+      }
       const val = snap.val();
       if(!val || !val.data) return;
       const serialized = serializeData(val.data);

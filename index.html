@@ -122,12 +122,31 @@
     </div>
   </div>
 
-<script>
-(function(){
-  // === CONFIG ===
-  const ADMIN_PASSWORD = 'admin123';
+<script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-database-compat.js"></script>
 
-  // full initial lists
+<script>
+/*
+  Versão completa unificada: UI + sincronização Realtime DB.
+  ATENÇÃO: substitua FIREBASE_CONFIG pelos valores do seu projeto Firebase.
+  Recomendo usar Firebase Auth para controle de admin (evite senha fixa no cliente).
+*/
+
+(function(){
+  // ============= CONFIG =============
+  const ADMIN_PASSWORD = 'admin123'; // TEMPORÁRIO: visível no cliente. Use Auth em produção.
+  const FIREBASE_CONFIG = {
+    apiKey: "YOUR_API_KEY",
+    authDomain: "YOUR_PROJECT.firebaseapp.com",
+    databaseURL: "https://YOUR_PROJECT-default-rtdb.firebaseio.com",
+    projectId: "YOUR_PROJECT",
+    storageBucket: "YOUR_PROJECT.appspot.com",
+    messagingSenderId: "SENDER_ID",
+    appId: "APP_ID"
+  };
+  // ===================================
+
+  // ---------- INITIAL DATA ----------
   const INITIAL = {
     Lucas:[
       'CIP _ RAFAEL GIELINSKI','CIP _ ADILSON DOS SANTOS MARQUES','CIP _ ADONIS TOLEDO PEDROSO',
@@ -152,17 +171,14 @@
     ]
   };
 
-  // state
+  // ---------- STATE ----------
   let DATA = makeDefault();
   let isAdmin = false;
 
-  function makeDefault(){
-    const out = {};
-    Object.keys(INITIAL).forEach(s => out[s] = INITIAL[s].map(n=>({name:n,status:'pendente',time:'',note:''})));
-    return out;
-  }
+  // expose for Firebase script & console debug
+  window.DATA = DATA;
 
-  // dom refs
+  // ---------- DOM refs ----------
   const adminToggle = document.getElementById('adminToggle');
   const adminIndicator = document.getElementById('adminIndicator');
   const openAdd = document.getElementById('openAdd');
@@ -188,11 +204,17 @@
   const modalCancel = document.getElementById('modalCancel');
   const modalConfirm = document.getElementById('modalConfirm');
 
-  // date
+  // ---------- helpers ----------
+  function makeDefault(){
+    const out = {};
+    Object.keys(INITIAL).forEach(s => out[s] = INITIAL[s].map(n=>({name:n,status:'pendente',time:'',note:''})));
+    return out;
+  }
+
   function todayISO(){ return (new Date()).toISOString().slice(0,10); }
   dateInput.value = todayISO();
 
-  // filters
+  // ---------- filters ----------
   let currentFilter = null;
   function buildFilterButtons(){
     filterBar.innerHTML = '';
@@ -207,7 +229,10 @@
   }
   buildFilterButtons();
 
+  // ---------- render ----------
   function render(){
+    window.DATA = DATA;
+
     supervisorsDiv.innerHTML = '';
     let total=0, active=0, inactive=0;
     Object.keys(DATA).forEach(s=>{
@@ -274,12 +299,12 @@
         if(t.status === 'entra_mais_tarde' || t.status === 'sai_mais_cedo'){
           const flex = document.createElement('div'); flex.className='flex'; flex.style.marginTop='8px';
           const time = document.createElement('input'); time.type='time'; time.value = t.time || '';
-          time.onchange = (e)=> { t.time = e.target.value; };
+          time.onchange = (e)=> { t.time = e.target.value; scheduleSave(); render(); };
           flex.appendChild(time); box.appendChild(flex);
         }
 
         const note = document.createElement('textarea'); note.placeholder='Observação / motivo'; note.value = t.note || '';
-        note.onchange = (e)=> { t.note = e.target.value; };
+        note.onchange = (e)=> { t.note = e.target.value; scheduleSave(); };
         note.style.marginTop='8px'; box.appendChild(note);
 
         card.appendChild(box);
@@ -302,30 +327,42 @@
   function setStatus(s, idx, status){
     DATA[s][idx].status = status;
     if(status !== 'entra_mais_tarde' && status !== 'sai_mais_cedo') DATA[s][idx].time = '';
+    scheduleSave();
     render();
   }
 
+  // ---------- CSV export ----------
   function exportCSV(){
     const rows = [['Date','Supervisor','Technician','Status','TimeAdjustment','Note']];
     const date = dateInput.value;
-    Object.keys(DATA).forEach(s=>{ DATA[s].forEach(t => rows.push([date,s,t.name,t.status,t.time||'',t.note||''])); });
-    const csv = rows.map(r => r.map(c => '\"' + String(c).replace(/\"/g,'\"\"') + '\"').join(',')).join('\r\n');
+    Object.keys(DATA).forEach(s=>{ DATA[s].forEach(t => rows.push([date,s,t.name,t.status || '',t.time||'',t.note||''])); });
+    const csv = rows.map(r => r.map(c => '"' + String(c).replace(/"/g,'""') + '"').join(',')).join('\r\n');
     const blob = new Blob([csv],{type:'text/csv;charset=utf-8;'}); const url = URL.createObjectURL(blob);
     const a = document.createElement('a'); a.href = url; a.download = 'presenca_' + date + '.csv'; a.click(); URL.revokeObjectURL(url);
   }
 
   csvBtn.addEventListener('click', exportCSV);
-  resetBtn.addEventListener('click', ()=>{ DATA = makeDefault(); render(); });
+  resetBtn.addEventListener('click', ()=>{ DATA = makeDefault(); scheduleSave(); render(); });
 
-  // admin
+  // ---------- modal helpers ----------
+  function openModal(title, bodyNode, confirmLabel='Confirmar', onConfirm){
+    modalTitle.textContent = title; modalBody.innerHTML = ''; modalBody.appendChild(bodyNode);
+    modalBackdrop.style.display = 'flex'; modalBackdrop.setAttribute('aria-hidden','false'); modalConfirm.textContent = confirmLabel;
+    function cleanup(){ modalBackdrop.style.display = 'none'; modalBackdrop.setAttribute('aria-hidden','true'); modalConfirm.onclick=null; modalCancel.onclick=null; }
+    modalCancel.onclick = ()=>{ cleanup(); };
+    modalConfirm.onclick = ()=>{ try{ onConfirm(); } finally { cleanup(); } };
+  }
+
+  // ---------- admin ----------
   function requireAdmin(onSuccess){
     if(isAdmin){ onSuccess(); return; }
     const body = document.createElement('div');
     const inp = document.createElement('input'); inp.type='password'; inp.placeholder='Senha de administrador'; inp.style.width='100%'; inp.style.padding='8px';
     body.appendChild(inp);
     openModal('Acesso administrador', body, 'Entrar', ()=>{
-      if(inp.value === ADMIN_PASSWORD){ isAdmin = true; adminIndicator.style.display='inline-block'; adminToggle.textContent='Bloquear Admin'; onSuccess(); }
-      else { alert('Senha incorreta'); }
+      if(inp.value === ADMIN_PASSWORD){
+        isAdmin = true; adminIndicator.style.display='inline-block'; adminToggle.textContent='Bloquear Admin'; onSuccess();
+      } else { alert('Senha incorreta'); }
     });
   }
 
@@ -334,16 +371,7 @@
     else { requireAdmin(()=>{ render(); }); }
   };
 
-  // modal helpers
-  function openModal(title, bodyNode, confirmLabel='Confirmar', onConfirm){
-    modalTitle.textContent = title; modalBody.innerHTML=''; modalBody.appendChild(bodyNode);
-    modalBackdrop.style.display='flex'; modalBackdrop.setAttribute('aria-hidden','false'); modalConfirm.textContent = confirmLabel;
-    function cleanup(){ modalBackdrop.style.display='none'; modalBackdrop.setAttribute('aria-hidden','true'); modalConfirm.onclick=null; modalCancel.onclick=null; }
-    modalCancel.onclick = ()=>{ cleanup(); };
-    modalConfirm.onclick = ()=>{ try{ onConfirm(); } finally { cleanup(); } };
-  }
-
-  // add/remove/move modals (require admin where used)
+  // ---------- add/remove/move ----------
   openAdd.onclick = ()=>{ requireAdmin(()=> openAddModal()); };
   function openAddModal(){
     const body = document.createElement('div');
@@ -354,7 +382,7 @@
     openModal('Adicionar Técnico', body, 'Adicionar', ()=>{
       const sup=supSel.value; const name = nameInp.value && nameInp.value.trim();
       if(!name) return alert('Informe um nome válido.');
-      DATA[sup].push({ name, status:'pendente', time:'', note:'' }); render();
+      DATA[sup].push({ name, status:'pendente', time:'', note:'' }); scheduleSave(); render();
     });
   }
 
@@ -367,7 +395,7 @@
     function refreshList(){ listDiv.innerHTML=''; const arr = DATA[supSel.value]||[]; if(arr.length===0){ listDiv.textContent='Sem técnicos.'; return; } arr.forEach((t,i)=>{ const el=document.createElement('div'); el.className='list-item'; el.textContent=(i+1)+' — '+t.name; el.dataset.idx=i; el.onclick=()=>{ Array.from(listDiv.children).forEach(c=>c.style.background=''); el.style.background='#eef7f6'; listDiv.dataset.chosenIdx=i; }; listDiv.appendChild(el); }); }
     supSel.onchange = refreshList; refreshList();
     body.appendChild(supSel); body.appendChild(listDiv);
-    openModal('Excluir Técnico', body, 'Excluir', ()=>{ const idx=parseInt(listDiv.dataset.chosenIdx,10); if(Number.isNaN(idx)) return alert('Escolha um técnico.'); DATA[supSel.value].splice(idx,1); render(); });
+    openModal('Excluir Técnico', body, 'Excluir', ()=>{ const idx=parseInt(listDiv.dataset.chosenIdx,10); if(Number.isNaN(idx)) return alert('Escolha um técnico.'); DATA[supSel.value].splice(idx,1); scheduleSave(); render(); });
   }
 
   function openMoveModal(fromSup, idx){
@@ -377,7 +405,7 @@
     const toSel = document.createElement('select'); toSel.style.width='100%'; toSel.style.padding='8px'; toSel.style.marginBottom='8px';
     Object.keys(INITIAL).forEach(s=>{ if(s===fromSup) return; const opt=document.createElement('option'); opt.value=s; opt.textContent=s; toSel.appendChild(opt); });
     body.appendChild(info); body.appendChild(toSel);
-    openModal('Mover Técnico', body, 'Mover', ()=>{ const to = toSel.value; if(!to) return; const item = DATA[fromSup].splice(idx,1)[0]; DATA[to].push(item); render(); });
+    openModal('Mover Técnico', body, 'Mover', ()=>{ const to = toSel.value; if(!to) return; const item = DATA[fromSup].splice(idx,1)[0]; DATA[to].push(item); scheduleSave(); render(); });
   }
 
   openMove.onclick = ()=>{ requireAdmin(()=> openMoveChooser()); };
@@ -390,56 +418,19 @@
     openModal('Mover Técnico (selecione origem)', body, 'Fechar', ()=>{});
   }
 
-  dateInput.addEventListener('change', render);
-  render();
+  dateInput.addEventListener('change', ()=>{ render(); startListening(); });
 
-})();
-</script>
-
-
-<!-- Firebase sync (Realtime Database) - add your Firebase config below -->
-<!-- Steps: 1) Create Firebase project at https://console.firebase.google.com  -->
-<!-- 2) Add a Web App and copy the config object. Replace FIREBASE_CONFIG below. -->
-<!-- 3) In Database -> Realtime Database create a database and set rules appropriately for your use case. -->
-<script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-database-compat.js"></script>
-<script>
-(function(){
-  // ====== CONFIG: REPLACE with your Firebase web app config ======
-  const FIREBASE_CONFIG = {
-    apiKey: "YOUR_API_KEY",
-    authDomain: "YOUR_PROJECT.firebaseapp.com",
-    databaseURL: "https://YOUR_PROJECT-default-rtdb.firebaseio.com",
-    projectId: "YOUR_PROJECT",
-    storageBucket: "YOUR_PROJECT.appspot.com",
-    messagingSenderId: "SENDER_ID",
-    appId: "APP_ID"
-  };
-  // =============================================================
-
-  // simple safety check
-  if(FIREBASE_CONFIG.apiKey.startsWith('YOUR_')){
-    console.warn('Firebase config not replaced yet. Realtime sync is disabled until you set FIREBASE_CONFIG.');
-    return;
-  }
-
-  // initialize Firebase (compat libs used to keep simple global firebase namespace)
-  const app = firebase.initializeApp(FIREBASE_CONFIG);
-  const db = firebase.database();
-
-  // helper: get selected date (format yyyy-mm-dd)
-  function getDateKey(){
-    const el = document.getElementById('date');
-    return el && el.value ? el.value : (new Date()).toISOString().slice(0,10);
-  }
-
-  // debounce save
+  // ---------- Firebase sync ----------
+  let firebaseApp = null;
+  let db = null;
   let saveTimer = null;
   let lastLocalSerialized = '';
   let lastRemoteSerialized = '';
+  let currentListenKey = null;
+  let currentRef = null;
 
-  function serializeData(data){
-    try{ return JSON.stringify(data); }catch(e){ return String(data); }
+  function serializeData(d){
+    try{ return JSON.stringify(d); }catch(e){ return String(d); }
   }
 
   function scheduleSave(delay=900){
@@ -447,72 +438,67 @@
     saveTimer = setTimeout(()=>{ saveTimer = null; saveToFirebase(); }, delay);
   }
 
+  function initFirebaseIfNeeded(){
+    if(firebaseApp || FIREBASE_CONFIG.apiKey.startsWith('YOUR_')) return;
+    try{
+      firebaseApp = firebase.initializeApp(FIREBASE_CONFIG);
+      db = firebase.database();
+    }catch(e){
+      console.error('Erro init firebase', e);
+    }
+  }
+
+  function getDateKey(){
+    const el = document.getElementById('date');
+    return el && el.value ? el.value : (new Date()).toISOString().slice(0,10);
+  }
+
   function saveToFirebase(){
+    initFirebaseIfNeeded();
+    if(!db){
+      console.warn('Firebase não configurado; salvamento local apenas.');
+      return;
+    }
     try{
       const key = getDateKey();
-      const payload = window.DATA || {};
+      const payload = DATA || {};
       const serialized = serializeData(payload);
-      // avoid unnecessary writes
       if(serialized === lastLocalSerialized) return;
       lastLocalSerialized = serialized;
-      // include a timestamp to help other clients detect fresh updates
       db.ref('attendance/' + key).set({data: payload, updatedAt: Date.now()}).catch(e=>console.error('Save failed',e));
       console.log('Saved attendance to Firebase for', key);
     }catch(e){ console.error(e); }
   }
 
   function startListening(){
+    initFirebaseIfNeeded();
+    if(!db) return;
     const key = getDateKey();
+    if(currentRef && currentListenKey === key){
+      return; // já ouvindo a mesma chave
+    }
+    if(currentRef) currentRef.off();
+    currentListenKey = key;
     const ref = db.ref('attendance/' + key);
+    currentRef = ref;
     ref.on('value', snap => {
       if(!snap.exists()) return;
       const val = snap.val();
       if(!val || !val.data) return;
       const serialized = serializeData(val.data);
-      // if identical to last local save, ignore (prevents loops)
       if(serialized === lastLocalSerialized) { lastRemoteSerialized = serialized; return; }
-      // apply remote state
-      window.DATA = val.data;
+      DATA = val.data;
+      window.DATA = DATA;
       lastRemoteSerialized = serialized;
-      try{ if(typeof window.render === 'function') window.render(); }
-      catch(e){ console.error('Error rendering after remote update', e); }
+      try{ render(); }catch(e){ console.error('Error rendering after remote update', e); }
       console.log('Applied remote update for', key);
     });
   }
 
-  // re-listen when date changes
-  document.getElementById('date').addEventListener('change', ()=>{
-    // small delay to allow render to run first, then listen & save
-    setTimeout(()=>{ startListening(); scheduleSave(500); }, 300);
-  });
-
-  // Hook into main mutation events to detect local changes (so we can save)
-  const container = document.querySelector('.container');
-  if(container){
-    const mo = new MutationObserver(()=>{ scheduleSave(); });
-    mo.observe(container, {childList:true, subtree:true, attributes:true, characterData:true});
-  }
-
-  // Wrap setStatus to trigger save on local updates
-  if(window.setStatus && typeof window.setStatus === 'function'){
-    const __origSetStatus = window.setStatus;
-    window.setStatus = function(s, idx, status){
-      const res = __origSetStatus.apply(this, arguments);
-      scheduleSave();
-      return res;
-    };
-  }
-
-  // ensure reset and CSV actions trigger save
-  const resetBtn = document.getElementById('resetBtn');
-  if(resetBtn) resetBtn.addEventListener('click', ()=>{ scheduleSave(400); });
-
-  // start listening initially after small delay to allow original script to setup DATA & render
   window.addEventListener('load', ()=>{
     setTimeout(()=>{ try{ startListening(); scheduleSave(1200); }catch(e){console.error(e);} }, 800);
   });
 
-  // expose small API for manual control in console if needed
   window.__attendanceSync = {
     save: saveToFirebase,
     listen: startListening,
@@ -520,9 +506,17 @@
     lastRemote: ()=> lastRemoteSerialized
   };
 
+  window.render = render;
+  window.setStatus = setStatus;
+
+  render();
+
+  if(FIREBASE_CONFIG.apiKey.startsWith('YOUR_')){
+    console.warn('Firebase config not replaced yet. Realtime sync is disabled until you set FIREBASE_CONFIG.');
+  }
+
 })();
 </script>
-<!-- end Firebase sync -->
 
 </body>
 </html>

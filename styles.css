@@ -24,11 +24,24 @@ button.ghost{background:#fff;color:#0f172a;border:1px solid #e6e9ef}
 .tech{border-radius:10px;padding:10px;border:1px solid #f0f2f6;margin-bottom:8px}
 .tech .name{font-weight:600;color:#0f172a}
 .buttons{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-top:8px}
-.btn-status{padding:8px;border-radius:8px;border:1px solid #e6e9ef;background:#fff;font-weight:600;min-width:72px;text-align:center}
+
+/* <- changed: make inactive (unpresssed) buttons visible */
+.btn-status{
+  padding:8px;border-radius:8px;border:1px solid #e6e9ef;
+  background:#f8fafc; /* light background so it's visible before click */
+  color:#0f172a; /* dark text */
+  font-weight:700;
+  min-width:72px;text-align:center;
+  cursor:pointer;
+  transition: background .12s, transform .06s;
+}
+.btn-status:active{ transform:translateY(1px); }
+
 .btn-trabalha.active{background:var(--ok);border-color:var(--ok);color:#fff}
 .btn-nao.active{background:var(--danger);border-color:var(--danger);color:#fff}
 .btn-entra.active{background:var(--amber);border-color:var(--amber);color:#fff}
 .btn-sai.active{background:var(--orange);border-color:var(--orange);color:#fff}
+
 input[type=time], input[type=text]{padding:8px;border-radius:8px;border:1px solid #e6e9ef;width:100%}
 textarea{width:100%;padding:8px;border-radius:8px;border:1px solid #e6e9ef}
 .flex{display:flex;gap:8px}

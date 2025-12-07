@@ -1,6 +1,7 @@
-// Application JS (split from HTML)
+// Application JS (updated: persistent roster, permanent delete/move, button visibility fixes)
+
 // ---------------- CONFIG ----------------
-const ADMIN_PASSWORD = 'admin123'; // temporário - recomendo Firebase Auth
+const ADMIN_PASSWORD = '88154266'; // temporário - recomendo Firebase Auth
 const FIREBASE_CONFIG = {
   apiKey: "AIzaSyDq1-T7ADK2B1tOnJQfBegCBWZ2OJcyp5w",
   authDomain: "lista-presenca-tecnicos.firebaseapp.com",
@@ -13,6 +14,7 @@ const FIREBASE_CONFIG = {
 };
 // ----------------------------------------
 
+// initial fallback (only used if roster absent)
 const INITIAL = {
   Lucas:[
     'CIP _ RAFAEL GIELINSKI','CIP _ ADILSON DOS SANTOS MARQUES','CIP _ ADONIS TOLEDO PEDROSO',
@@ -37,8 +39,11 @@ const INITIAL = {
   ]
 };
 
+// ROSTER: fonte mestre (persistente). Iniciado com INITIAL as fallback
+let ROSTER = JSON.parse(JSON.stringify(INITIAL));
+
 // state & refs
-let DATA = makeDefault();
+let DATA = {}; // will be created from ROSTER via makeDefault()
 window.DATA = DATA;
 let isAdmin = false;
 
@@ -67,23 +72,26 @@ const modalBody = document.getElementById('modalBody');
 const modalCancel = document.getElementById('modalCancel');
 const modalConfirm = document.getElementById('modalConfirm');
 
+// ---------- helpers ----------
 function makeDefault(){
-  const out={};
-  Object.keys(INITIAL).forEach(s=> out[s] = INITIAL[s].map(n=>({name:n,status:'pendente',time:'',note:''})));
+  const out = {};
+  Object.keys(ROSTER).forEach(s => {
+    out[s] = (ROSTER[s] || []).map(n => ({ name: n, status: 'pendente', time: '', note: '' }));
+  });
   return out;
 }
 
 function todayISO(){ return (new Date()).toISOString().slice(0,10); }
 dateInput.value = todayISO();
 
-// filters
+// ---------- filters ----------
 let currentFilter = null;
 function buildFilterButtons(){
   filterBar.innerHTML = '';
   const btnAll = document.createElement('button'); btnAll.textContent='Todos'; btnAll.className='ghost';
   btnAll.onclick = ()=>{ currentFilter = null; render(); };
   filterBar.appendChild(btnAll);
-  Object.keys(INITIAL).forEach(s=>{
+  Object.keys(ROSTER).forEach(s=>{
     const b = document.createElement('button'); b.textContent = s; b.className='ghost';
     b.onclick = ()=>{ currentFilter = (currentFilter===s? null: s); render(); };
     filterBar.appendChild(b);
@@ -91,7 +99,7 @@ function buildFilterButtons(){
 }
 buildFilterButtons();
 
-// render
+// ---------- render ----------
 function render(){
   window.DATA = DATA;
   supervisorsDiv.innerHTML = '';
@@ -214,7 +222,7 @@ function exportCSV(){
   const rows = [['Date','Supervisor','Technician','Status','TimeAdjustment','Note']];
   const date = dateInput.value;
   Object.keys(DATA).forEach(s=>{ DATA[s].forEach(t => rows.push([date,s,t.name,t.status || '',t.time||'',t.note||''])); });
-  const csv = rows.map(r => r.map(c => '"' + String(c).replace(/"/g,'""') + '"').join(',')).join('\r\n');
+  const csv = rows.map(r => r.map(c => '\"' + String(c).replace(/\"/g,'\"\"') + '\"').join(',')).join('\\r\\n');
   const blob = new Blob([csv],{type:'text/csv;charset=utf-8;'}); const url = URL.createObjectURL(blob);
   const a = document.createElement('a'); a.href = url; a.download = 'presenca_' + date + '.csv'; a.click(); URL.revokeObjectURL(url);
 }
@@ -247,18 +255,31 @@ adminToggle.onclick = ()=>{
   else { requireAdmin(()=>{ render(); }); }
 };
 
-// add/remove/move
+// add/remove/move (UPDATED to update roster persistently)
 openAdd.onclick = ()=>{ requireAdmin(()=> openAddModal()); };
 function openAddModal(){
   const body = document.createElement('div');
   const supSel = document.createElement('select'); supSel.style.width='100%'; supSel.style.padding='8px'; supSel.style.marginBottom='8px';
-  Object.keys(INITIAL).forEach(s=>{ const opt=document.createElement('option'); opt.value=s; opt.textContent=s; supSel.appendChild(opt); });
+  Object.keys(ROSTER).forEach(s=>{ const opt=document.createElement('option'); opt.value=s; opt.textContent=s; supSel.appendChild(opt); });
   const nameInp = document.createElement('input'); nameInp.placeholder='Nome do técnico'; nameInp.style.width='100%'; nameInp.style.padding='8px';
   body.appendChild(supSel); body.appendChild(nameInp);
   openModal('Adicionar Técnico', body, 'Adicionar', ()=>{
     const sup=supSel.value; const name = nameInp.value && nameInp.value.trim();
     if(!name) return alert('Informe um nome válido.');
-    DATA[sup].push({ name, status:'pendente', time:'', note:'' }); scheduleSave(); render();
+    // add to roster and persist
+    ROSTER[sup] = ROSTER[sup] || [];
+    ROSTER[sup].push(name);
+    saveRosterToFirebase().then(()=>{
+      // rebuild default data and keep any existing attendance for current date
+      DATA = makeDefault();
+      window.DATA = DATA;
+      scheduleSave();
+      render();
+      alert('Técnico adicionado permanentemente ao roster.');
+    }).catch(e=>{
+      console.error('Erro ao salvar roster', e);
+      alert('Técnico adicionado localmente, mas houve erro ao salvar no servidor.');
+    });
   });
 }
 
@@ -266,12 +287,39 @@ openRemove.onclick = ()=>{ requireAdmin(()=> openRemoveModal()); };
 function openRemoveModal(){
   const body = document.createElement('div');
   const supSel = document.createElement('select'); supSel.style.width='100%'; supSel.style.padding='8px'; supSel.style.marginBottom='8px';
-  Object.keys(INITIAL).forEach(s=>{ const opt=document.createElement('option'); opt.value=s; opt.textContent=s; supSel.appendChild(opt); });
+  Object.keys(ROSTER).forEach(s=>{ const opt=document.createElement('option'); opt.value=s; opt.textContent=s; supSel.appendChild(opt); });
   const listDiv = document.createElement('div'); listDiv.className='list-select';
   function refreshList(){ listDiv.innerHTML=''; const arr = DATA[supSel.value]||[]; if(arr.length===0){ listDiv.textContent='Sem técnicos.'; return; } arr.forEach((t,i)=>{ const el=document.createElement('div'); el.className='list-item'; el.textContent=(i+1)+' — '+t.name; el.dataset.idx=i; el.onclick=()=>{ Array.from(listDiv.children).forEach(c=>c.style.background=''); el.style.background='#eef7f6'; listDiv.dataset.chosenIdx=i; }; listDiv.appendChild(el); }); }
   supSel.onchange = refreshList; refreshList();
   body.appendChild(supSel); body.appendChild(listDiv);
-  openModal('Excluir Técnico', body, 'Excluir', ()=>{ const idx=parseInt(listDiv.dataset.chosenIdx,10); if(Number.isNaN(idx)) return alert('Escolha um técnico.'); DATA[supSel.value].splice(idx,1); scheduleSave(); render(); });
+  openModal('Excluir Técnico', body, 'Excluir', ()=>{ 
+    const idx=parseInt(listDiv.dataset.chosenIdx,10);
+    if(Number.isNaN(idx)) return alert('Escolha um técnico.');
+    const sup = supSel.value;
+    const removed = DATA[sup].splice(idx,1)[0]; // remove from today's DATA
+    
+    // remove from roster persistently
+    if(Array.isArray(ROSTER[sup])){
+      const pos = ROSTER[sup].findIndex(n => n === removed.name);
+      if(pos !== -1){
+        ROSTER[sup].splice(pos,1);
+      }
+      saveRosterToFirebase().then(()=> {
+        // rebuild default (without removed) and persist today's attendance
+        DATA = makeDefault();
+        window.DATA = DATA;
+        scheduleSave();
+        render();
+        alert('Técnico removido permanentemente do roster.');
+      }).catch(e=>{
+        console.error('Erro ao salvar roster', e);
+        alert('Técnico removido localmente, mas houve erro ao salvar no servidor.');
+      });
+    } else {
+      scheduleSave();
+      render();
+    }
+  });
 }
 
 function openMoveModal(fromSup, idx){
@@ -279,9 +327,35 @@ function openMoveModal(fromSup, idx){
   const info = document.createElement('div'); info.className='small-muted'; info.style.marginBottom='8px';
   info.textContent = 'Mover: ' + (DATA[fromSup][idx]?.name || '(sem nome)') + ' — de ' + fromSup;
   const toSel = document.createElement('select'); toSel.style.width='100%'; toSel.style.padding='8px'; toSel.style.marginBottom='8px';
-  Object.keys(INITIAL).forEach(s=>{ if(s===fromSup) return; const opt=document.createElement('option'); opt.value=s; opt.textContent=s; toSel.appendChild(opt); });
+  Object.keys(ROSTER).forEach(s=>{ if(s===fromSup) return; const opt=document.createElement('option'); opt.value=s; opt.textContent=s; toSel.appendChild(opt); });
   body.appendChild(info); body.appendChild(toSel);
-  openModal('Mover Técnico', body, 'Mover', ()=>{ const to = toSel.value; if(!to) return; const item = DATA[fromSup].splice(idx,1)[0]; DATA[to].push(item); scheduleSave(); render(); });
+  openModal('Mover Técnico', body, 'Mover', ()=>{ 
+    const to = toSel.value; 
+    if(!to) return; 
+    const item = DATA[fromSup].splice(idx,1)[0];
+    DATA[to].push(item);
+
+    // update roster: remove from fromSup and add to 'to'
+    if(Array.isArray(ROSTER[fromSup])){
+      const pos = ROSTER[fromSup].findIndex(n => n === item.name);
+      if(pos !== -1) ROSTER[fromSup].splice(pos,1);
+    }
+    ROSTER[to] = ROSTER[to] || [];
+    // avoid duplicates
+    if(ROSTER[to].indexOf(item.name) === -1) ROSTER[to].push(item.name);
+
+    saveRosterToFirebase().then(()=>{
+      // rebuild defaults (keep current attendance state where possible)
+      DATA = makeDefault();
+      window.DATA = DATA;
+      scheduleSave();
+      render();
+      alert('Técnico movido permanentemente no roster.');
+    }).catch(e=>{
+      console.error('Erro ao salvar roster', e);
+      alert('Técnico movido localmente, mas houve erro ao salvar no servidor.');
+    });
+  });
 }
 
 openMove.onclick = ()=>{ requireAdmin(()=> openMoveChooser()); };
@@ -296,7 +370,7 @@ function openMoveChooser(){
 
 dateInput.addEventListener('change', ()=>{ DATA = makeDefault(); window.DATA = DATA; render(); startListening(); });
 
-// Firebase sync
+// ---------- Firebase sync ----------
 let firebaseApp = null;
 let db = null;
 let saveTimer = null;
@@ -324,6 +398,30 @@ function initFirebaseIfNeeded(){
   }
 }
 
+// ---------- roster persistence ----------
+function loadRosterFromFirebase(){
+  initFirebaseIfNeeded();
+  if(!db) return Promise.resolve();
+  return db.ref('roster').once('value').then(snap => {
+    if(!snap.exists()){
+      // seed roster if missing
+      return db.ref('roster').set(ROSTER).catch(e => console.warn('fail save roster initial', e));
+    }
+    const val = snap.val();
+    if(val && typeof val === 'object'){
+      ROSTER = val;
+      console.log('Loaded roster from firebase');
+    }
+  }).catch(e => console.error('loadRosterFromFirebase error', e));
+}
+
+function saveRosterToFirebase(){
+  initFirebaseIfNeeded();
+  if(!db) { console.warn('DB not initialized - roster not saved'); return Promise.reject('no-db'); }
+  return db.ref('roster').set(ROSTER).then(()=>console.log('Roster saved')).catch(e=>{ console.error('saveRosterToFirebase', e); throw e; });
+}
+
+// ---------- attendance save/listen ----------
 function getDateKey(){
   const el = document.getElementById('date');
   return el && el.value ? el.value : (new Date()).toISOString().slice(0,10);
@@ -378,8 +476,27 @@ function startListening(){
   });
 }
 
+// init flow: load roster then create DATA & listen
 window.addEventListener('load', ()=>{
-  setTimeout(()=>{ try{ startListening(); scheduleSave(1200); }catch(e){console.error(e);} }, 800);
+  setTimeout(()=>{ 
+    try{
+      initFirebaseIfNeeded();
+      loadRosterFromFirebase().then(()=>{
+        DATA = makeDefault();
+        window.DATA = DATA;
+        buildFilterButtons(); // rebuild based on roster
+        render();
+        startListening();
+        scheduleSave(1200);
+      }).catch(e=>{
+        console.error('roster load failed', e);
+        DATA = makeDefault();
+        window.DATA = DATA;
+        render();
+        startListening();
+      });
+    }catch(e){console.error(e);} 
+  }, 400);
 });
 
 window.__attendanceSync = {
@@ -391,9 +508,3 @@ window.__attendanceSync = {
 
 window.render = render;
 window.setStatus = setStatus;
-
-render();
-
-if(FIREBASE_CONFIG.apiKey.startsWith('YOUR_')){
-  console.warn('Firebase config not replaced yet. Realtime sync is disabled until you set FIREBASE_CONFIG.');
-}

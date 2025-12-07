@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Lista Diária — Técnicos (Admin)</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div>
+        <h1>Lista Diária — Técnicos</h1>
+        <p class="small">Com controle de administrador para adicionar/excluir/mover.</p>
+      </div>
+      <div style="margin-left:auto;display:flex;gap:8px;align-items:center">
+        <div id="adminIndicator" style="display:none" class="admin-badge">ADMIN</div>
+        <button id="adminToggle" class="ghost">Entrar Admin</button>
+      </div>
+    </header>
+
+    <div class="controls">
+      <input id="date" type="date" />
+      <button id="csvBtn">Exportar CSV</button>
+      <button id="resetBtn" class="ghost">Resetar</button>
+      <button id="openAdd" class="ghost" data-admin="true" title="Adicionar técnico (requer admin)">Adicionar</button>
+      <button id="openRemove" class="ghost" data-admin="true" title="Excluir técnico (requer admin)">Excluir</button>
+      <button id="openMove" class="ghost" data-admin="true" title="Mover técnico (requer admin)">Mover</button>
+    </div>
+
+    <div id="filterBar" class="controls filterBar" style="margin-bottom:8px"></div>
+
+    <div class="card" id="overview">
+      <div class="row">
+        <div>
+          <div class="small-muted">Técnicos totais</div>
+          <div id="total" style="font-weight:700;font-size:18px">0</div>
+        </div>
+        <div style="margin-left:16px">
+          <div class="small-muted">Ativos</div>
+          <div id="active" style="font-weight:700;font-size:18px">0</div>
+        </div>
+        <div style="margin-left:16px">
+          <div class="small-muted">Não ativos</div>
+          <div id="inactive" style="font-weight:700;font-size:18px">0</div>
+        </div>
+        <div style="margin-left:auto;text-align:right">
+          <div class="small-muted">Ativos %</div>
+          <div id="pct" style="font-weight:700;font-size:18px">0%</div>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;margin-top:10px">
+        <div class="legend">
+          <div class="pill trab">Trabalha</div>
+          <div class="pill nao">Não</div>
+          <div class="pill entra">Entra mais tarde</div>
+          <div class="pill sai">Sai mais cedo</div>
+        </div>
+      </div>
+      <div class="chart" aria-hidden>
+        <div id="chartActive" class="active" style="width:0%"></div>
+        <div id="chartInactive" class="inactive" style="width:0%"></div>
+      </div>
+    </div>
+
+    <div id="supervisors"></div>
+  </div>
+
+  <!-- Modal backdrop -->
+  <div id="modalBackdrop" class="modal-backdrop" role="dialog" aria-hidden="true">
+    <div class="modal" id="modal">
+      <h3 id="modalTitle">Modal</h3>
+      <div id="modalBody"></div>
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px">
+        <button id="modalCancel" class="ghost">Cancelar</button>
+        <button id="modalConfirm">Confirmar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Firebase libs -->
+  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-database-compat.js"></script>
+
+  <script src="app.js"></script>
+</body>
+</html>
